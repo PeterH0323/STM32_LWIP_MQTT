@@ -40,6 +40,10 @@ struct mqtt_recv_buffer s__mqtt_recv_buffer_g = {
 };
 
 
+
+static err_t bsp_mqtt_subscribe(mqtt_client_t* mqtt_client, char * sub_topic, uint8_t qos);
+
+
 /* ===========================================
                  接收回调函数
 ============================================== */
@@ -48,13 +52,14 @@ struct mqtt_recv_buffer s__mqtt_recv_buffer_g = {
 * @brief mqtt 接收数据处理函数接口，需要在应用层进行处理
 *        执行条件：mqtt连接成功
 *
-* @param [in1] : 接收的数据指针
-* @param [in2] : 接收数据长度
+* @param [in1] : 用户提供的回调参数指针
+* @param [in2] : 接收的数据指针
+* @param [in3] : 接收数据长度
 * @retval: 处理的结果
 */
 __weak int mqtt_rec_data_process(void* arg, char *rec_buf, uint64_t buf_len)
 {
-    print_log("recv_buffer = %s", rec_buf);
+    print_log("recv_buffer = %s\n", rec_buf);
     return 0;
 }
 
@@ -142,7 +147,8 @@ static void bsp_mqtt_incoming_publish_cb(void *arg, const char *topic, u32_t tot
 */
 __weak void mqtt_conn_suc_proc(mqtt_client_t *client, void *arg)
 {
-
+    char test_sub_topic[] = "/public/TEST/AidenHinGwenWong_sub";
+    bsp_mqtt_subscribe(client,test_sub_topic,0);
 }
 
 /*!
@@ -181,6 +187,8 @@ static void bsp_mqtt_connection_cb(mqtt_client_t *client, void *arg, mqtt_connec
         // 注册接收数据的回调函数
 		mqtt_set_inpub_callback(client, bsp_mqtt_incoming_publish_cb, bsp_mqtt_incoming_data_cb, arg);  
         
+        
+        
         //成功处理函数
 		mqtt_conn_suc_proc(client, arg);
     }
@@ -211,7 +219,7 @@ static err_t bsp_mqtt_connect(void)
 		NULL,   /* MQTT 服务器用户名 */
 		NULL,   /* MQTT 服务器密码 */
 		60,     /* 与 MQTT 服务器保持连接时间，时间超过未发送数据会断开 */
-		"/public/TEST/AidenHinGwenWong",/* MQTT遗嘱的消息发送topic */
+		"/public/TEST/AidenHinGwenWong_pub",/* MQTT遗嘱的消息发送topic */
 		"Offline_pls_check", /* MQTT遗嘱的消息，断开服务器的时候会发送 */
 		0,  /* MQTT遗嘱的消息 Qos */
 		0   /* MQTT遗嘱的消息 Retain */
@@ -271,7 +279,7 @@ static void mqtt_client_pub_request_cb(void *arg, err_t result)
         print_log("mqtt_client_pub_request_cb: c002: Publish FAIL, result = %s\n", lwip_strerr(result));
         
 		//错误处理
-        mqtt_error_process_callback(arg, client);
+		mqtt_error_process_callback(client, arg);
     }
 	else
 	{
@@ -336,6 +344,83 @@ err_t bsp_mqtt_publish(mqtt_client_t *client, char *pub_topic, char *pub_buf, ui
 }
 
 /* ===========================================
+                 MQTT 订阅接口函数
+============================================== */
+
+
+/*!
+* @brief MQTT 订阅的回调函数
+*        执行条件：MQTT 连接成功
+*
+* @param [in] : 用户提供的回调参数指针
+* @param [in] : MQTT 订阅结果
+* @retval: None
+*/
+static void bsp_mqtt_request_cb(void *arg, err_t err)
+{
+    if ( arg == NULL )
+    {
+        print_log("bsp_mqtt_request_cb: input error@@\n");
+        return;
+    }
+
+    mqtt_client_t *client = (mqtt_client_t *)arg;
+
+    if ( err != ERR_OK )
+    {
+        print_log("bsp_mqtt_request_cb: FAIL sub, sub again, err = %s\n", lwip_strerr(err));
+
+		//错误处理
+		mqtt_error_process_callback(client, arg);
+    }
+	else
+	{
+		print_log("bsp_mqtt_request_cb: sub SUCCESS!\n");
+	}
+}
+
+/*!
+* @brief mqtt 订阅
+*        执行条件：连接成功
+*
+* @param [in1] : mqtt 连接句柄
+* @param [in2] : mqtt 发送 topic 指针
+* @param [in5] : qos
+* @retval: 订阅状态
+*/
+static err_t bsp_mqtt_subscribe(mqtt_client_t* mqtt_client, char * sub_topic, uint8_t qos)
+{
+    print_log("bsp_mqtt_subscribe: Enter\n");
+	
+	if( ( mqtt_client == NULL) || ( sub_topic == NULL) || ( qos > 2 ) )
+	{
+        print_log("bsp_mqtt_subscribe: input error@@\n");
+		return ERR_VAL;
+	}
+
+	if ( mqtt_client_is_connected(mqtt_client) != pdTRUE )
+	{
+		print_log("bsp_mqtt_subscribe: mqtt is not connected, return ERR_CLSD.\n");
+		return ERR_CLSD;
+	}
+
+	err_t err;
+	err = mqtt_subscribe(mqtt_client, sub_topic, qos, bsp_mqtt_request_cb, (void *)mqtt_client);  // subscribe and call back.
+
+	if (err != ERR_OK)
+	{
+		print_log("bsp_mqtt_subscribe: mqtt_subscribe Fail, return:%s \n", lwip_strerr(err));
+	}
+	else
+	{
+		print_log("bsp_mqtt_subscribe: mqtt_subscribe SUCCESS, reason: %s\n", lwip_strerr(err));
+	}
+
+	return err;
+}
+
+
+/* ===========================================
                  初始化接口函数
 ============================================== */
 
@@ -356,7 +441,7 @@ void bsp_mqtt_init(void)
     char message_test[] = "Hello mqtt server";
     for(int i = 0; i < 10; i++)
     {
-        bsp_mqtt_publish(s__mqtt_client_instance,"/public/TEST/AidenHinGwenWong",message_test,sizeof(message_test),1,0);
+        bsp_mqtt_publish(s__mqtt_client_instance,"/public/TEST/AidenHinGwenWong_pub",message_test,sizeof(message_test),1,0);
         vTaskDelay(1000);        
     }
     
