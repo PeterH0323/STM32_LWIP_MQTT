@@ -125,6 +125,14 @@
 #define CHECKSUM_CHECK_ICMP6 0
 /*-----------------------------------------------------------------------------*/
 /* USER CODE BEGIN 1 */
+
+//?? LWIP DEBUG 
+#define LWIP_DEBUG 
+  #include "bsp_printlog.h" 
+  #undef LWIP_PLATFORM_DIAG
+  #define LWIP_PLATFORM_DIAG(x) do {print_log x;} while(0)
+  
+#define MQTT_DEBUG          LWIP_DBG_ON
 /* USER CODE END 1 */
 
 #ifdef __cplusplus
